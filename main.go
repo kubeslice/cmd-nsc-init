@@ -23,12 +23,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
-
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/edwarnicke/grpcfd"
 	"github.com/kelseyhightower/envconfig"
@@ -38,6 +32,11 @@ import (
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"io/ioutil"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	kernelmech "github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/kernel"
@@ -228,25 +227,32 @@ func main() {
 		originalResolvConfigFile := "/etc/resolv.conf"
 
 		originalResolvConf, err := ioutil.ReadFile(originalResolvConfigFile)
-	        if err != nil || len(originalResolvConf) == 0 {
+		if err != nil || len(originalResolvConf) == 0 {
 			logger.Fatalf("failed to read resolv.conf: %v", err.Error())
-	        }
-	        err = os.WriteFile(storeResolvConfigFile, originalResolvConf, os.ModePerm)
+		}
+		err = os.WriteFile(storeResolvConfigFile, originalResolvConf, os.ModePerm)
 		if err != nil {
 			logger.Fatalf("failed to write resolv.conf to backup: %v", err.Error())
 		}
 
-		// Overwrite the original resolv.conf and set the nameserver to the localhost address to
+		// Overwrite the original resolv.conf and set the nameserver to the kubeslice-dns/localhost address to
 		// redirect dns queries to the cmd-nsc sidecar.
 		var sb strings.Builder
-		_, _ = sb.WriteString("nameserver 127.0.0.1")
+		if os.Getenv("DNS_NAMESERVER_IP") != "" {
+			s := fmt.Sprintf("nameserver %s", os.Getenv("DNS_NAMESERVER_IP"))
+			_, _ = sb.WriteString(s)
+			_, _ = sb.WriteRune('\n')
+			_, _ = sb.WriteString("search iperf.svc.cluster.local svc.cluster.local cluster.local")
+		} else {
+			_, _ = sb.WriteString("nameserver 127.0.0.1")
+		}
 		_, _ = sb.WriteRune('\n')
 		_, _ = sb.WriteString("options ndots:5")
 		err = ioutil.WriteFile(originalResolvConfigFile, []byte(sb.String()), os.ModePerm)
-                if err != nil {
+		if err != nil {
 			logger.Fatalf("failed to write to original resolv.conf: %v", err.Error())
 		}
-        }
+	}
 }
 
 func setLogLevel(level string) {
