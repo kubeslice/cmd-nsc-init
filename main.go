@@ -241,8 +241,6 @@ func main() {
 		if os.Getenv("DNS_NAMESERVER_IP") != "" {
 			s := fmt.Sprintf("nameserver %s", os.Getenv("DNS_NAMESERVER_IP"))
 			_, _ = sb.WriteString(s)
-			_, _ = sb.WriteRune('\n')
-			_, _ = sb.WriteString("search iperf.svc.cluster.local svc.cluster.local cluster.local")
 		} else {
 			_, _ = sb.WriteString("nameserver 127.0.0.1")
 		}
