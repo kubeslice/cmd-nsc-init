@@ -66,12 +66,6 @@ import (
 	"github.com/networkservicemesh/cmd-nsc-init/internal/config"
 	"github.com/networkservicemesh/cmd-nsc-init/internal/dnscontext"
 )
-
-type resolveConfig struct {
-	path       string
-	properties map[string][]string
-}
-
 func main() {
 	// ********************************************************************************
 	// Configure signal handling context
