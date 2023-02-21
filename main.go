@@ -64,7 +64,13 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/tracing"
 
 	"github.com/networkservicemesh/cmd-nsc-init/internal/config"
+	"github.com/networkservicemesh/cmd-nsc-init/internal/dnscontext"
 )
+
+type resolveConfig struct {
+	path       string
+	properties map[string][]string
+}
 
 func main() {
 	// ********************************************************************************
@@ -234,21 +240,26 @@ func main() {
 		if err != nil {
 			logger.Fatalf("failed to write resolv.conf to backup: %v", err.Error())
 		}
-
 		// Overwrite the original resolv.conf and set the nameserver to the kubeslice-dns/localhost address to
 		// redirect dns queries to the cmd-nsc sidecar.
 		var sb strings.Builder
 		if os.Getenv("DNS_NAMESERVER_IP") != "" {
-			s := fmt.Sprintf("nameserver %s", os.Getenv("DNS_NAMESERVER_IP"))
-			_, _ = sb.WriteString(s)
+			r, err := dnscontext.OpenResolveConfig(originalResolvConfigFile)
+			if err != nil {
+				logger.Fatalf("An error during open resolve config: %v", err.Error())
+			}
+			r.SetValue(dnscontext.NameserverProperty, os.Getenv("DNS_NAMESERVER_IP"))
+			if err := r.Save(); err != nil {
+				logger.Fatalf("An error during save resolve config: %v", err.Error())
+			}
 		} else {
 			_, _ = sb.WriteString("nameserver 127.0.0.1")
-		}
-		_, _ = sb.WriteRune('\n')
-		_, _ = sb.WriteString("options ndots:5")
-		err = ioutil.WriteFile(originalResolvConfigFile, []byte(sb.String()), os.ModePerm)
-		if err != nil {
-			logger.Fatalf("failed to write to original resolv.conf: %v", err.Error())
+			_, _ = sb.WriteRune('\n')
+			_, _ = sb.WriteString("options ndots:5")
+			err = ioutil.WriteFile(originalResolvConfigFile, []byte(sb.String()), os.ModePerm)
+			if err != nil {
+				logger.Fatalf("failed to write to original resolv.conf: %v", err.Error())
+			}
 		}
 	}
 }
