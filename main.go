@@ -28,7 +28,6 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/edwarnicke/grpcfd"
 	"github.com/kelseyhightower/envconfig"
@@ -38,7 +37,6 @@ import (
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	kernelmech "github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/kernel"
 	vfiomech "github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/vfio"
@@ -63,10 +61,9 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/spiffejwt"
 	"github.com/networkservicemesh/sdk/pkg/tools/token"
 	"github.com/networkservicemesh/sdk/pkg/tools/tracing"
-
 	"github.com/networkservicemesh/cmd-nsc-init/internal/config"
+	"github.com/networkservicemesh/cmd-nsc-init/internal/dnscontext"
 )
-
 func main() {
 	// ********************************************************************************
 	// Configure signal handling context
@@ -228,25 +225,34 @@ func main() {
 		originalResolvConfigFile := "/etc/resolv.conf"
 
 		originalResolvConf, err := ioutil.ReadFile(originalResolvConfigFile)
-	        if err != nil || len(originalResolvConf) == 0 {
+		if err != nil || len(originalResolvConf) == 0 {
 			logger.Fatalf("failed to read resolv.conf: %v", err.Error())
-	        }
-	        err = os.WriteFile(storeResolvConfigFile, originalResolvConf, os.ModePerm)
+		}
+		err = os.WriteFile(storeResolvConfigFile, originalResolvConf, os.ModePerm)
 		if err != nil {
 			logger.Fatalf("failed to write resolv.conf to backup: %v", err.Error())
 		}
-
-		// Overwrite the original resolv.conf and set the nameserver to the localhost address to
-		// redirect dns queries to the cmd-nsc sidecar.
+		// Overwrite the original resolv.conf and set the nameserver to the user specified dns server address / localhost address to redirect dns queries to the cmd-nsc sidecar.
 		var sb strings.Builder
-		_, _ = sb.WriteString("nameserver 127.0.0.1")
-		_, _ = sb.WriteRune('\n')
-		_, _ = sb.WriteString("options ndots:5")
-		err = ioutil.WriteFile(originalResolvConfigFile, []byte(sb.String()), os.ModePerm)
-                if err != nil {
-			logger.Fatalf("failed to write to original resolv.conf: %v", err.Error())
+		if os.Getenv("DNS_NAMESERVER_IP") != "" {
+			r, err := dnscontext.OpenResolveConfig(originalResolvConfigFile)
+			if err != nil {
+				logger.Fatalf("An error during open resolve config: %v", err.Error())
+			}
+			r.SetValue(dnscontext.NameserverProperty, os.Getenv("DNS_NAMESERVER_IP"))
+			if err := r.Save(); err != nil {
+				logger.Fatalf("An error during save resolve config: %v", err.Error())
+			}
+		} else {
+			_, _ = sb.WriteString("nameserver 127.0.0.1")
+			_, _ = sb.WriteRune('\n')
+			_, _ = sb.WriteString("options ndots:5")
+			err = ioutil.WriteFile(originalResolvConfigFile, []byte(sb.String()), os.ModePerm)
+			if err != nil {
+				logger.Fatalf("failed to write to original resolv.conf: %v", err.Error())
+			}
 		}
-        }
+	}
 }
 
 func setLogLevel(level string) {
