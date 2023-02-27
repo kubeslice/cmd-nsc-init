@@ -23,6 +23,11 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/edwarnicke/grpcfd"
 	"github.com/kelseyhightower/envconfig"
@@ -32,12 +37,6 @@ import (
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"io/ioutil"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
-
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
 	kernelmech "github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/kernel"
 	vfiomech "github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/vfio"
@@ -62,7 +61,6 @@ import (
 	"github.com/networkservicemesh/sdk/pkg/tools/spiffejwt"
 	"github.com/networkservicemesh/sdk/pkg/tools/token"
 	"github.com/networkservicemesh/sdk/pkg/tools/tracing"
-
 	"github.com/networkservicemesh/cmd-nsc-init/internal/config"
 	"github.com/networkservicemesh/cmd-nsc-init/internal/dnscontext"
 )
@@ -234,8 +232,7 @@ func main() {
 		if err != nil {
 			logger.Fatalf("failed to write resolv.conf to backup: %v", err.Error())
 		}
-		// Overwrite the original resolv.conf and set the nameserver to the kubeslice-dns/localhost address to
-		// redirect dns queries to the cmd-nsc sidecar.
+		// Overwrite the original resolv.conf and set the nameserver to the user specified dns server address / localhost address to redirect dns queries to the cmd-nsc sidecar.
 		var sb strings.Builder
 		if os.Getenv("DNS_NAMESERVER_IP") != "" {
 			r, err := dnscontext.OpenResolveConfig(originalResolvConfigFile)
