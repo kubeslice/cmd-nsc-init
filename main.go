@@ -23,10 +23,9 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
@@ -101,6 +100,7 @@ func main() {
 		logger.Fatalf("error processing rootConf from env: %+v", err)
 	}
 	setLogLevel(rootConf.LogLevel)
+	rootConf.ConnectTo = url.URL{Scheme: "tcp", Host: os.Getenv("MY_NODE_NAME") + ".kubeslice-system.svc.cluster.local:5001"}
 	logger.Infof("rootConf: %+v", rootConf)
 
 	// ********************************************************************************
@@ -190,7 +190,6 @@ func main() {
 	// ********************************************************************************
 	// Initiate connections
 	// ********************************************************************************
-	initDnsConfig := false
 	for i := 0; i < len(rootConf.NetworkServices); i++ {
 		// Update network services configs
 		u := (*nsurl.NSURL)(&rootConf.NetworkServices[i])
@@ -214,39 +213,7 @@ func main() {
 		}
 
 		logger.Infof("successfully connected to %v. Response: %v", u.NetworkService(), resp)
-
-		// Initialize DNS config only if atleast one of the responses contain a DnsContext section
-		if resp.GetContext().GetDnsContext() != nil {
-			initDnsConfig = true
-		}
 	}
-
-	if initDnsConfig {
-		// Copy the original resolv.conf to the backup directory so that the cmd-nsc sidecar can
-		// read from the backup and initialize its data structures related to dns resolution.
-		storeResolvConfigFile := "/etc/nsm-dns-config/resolv.conf.restore"
-		originalResolvConfigFile := "/etc/resolv.conf"
-
-		originalResolvConf, err := ioutil.ReadFile(originalResolvConfigFile)
-	        if err != nil || len(originalResolvConf) == 0 {
-			logger.Fatalf("failed to read resolv.conf: %v", err.Error())
-	        }
-	        err = os.WriteFile(storeResolvConfigFile, originalResolvConf, os.ModePerm)
-		if err != nil {
-			logger.Fatalf("failed to write resolv.conf to backup: %v", err.Error())
-		}
-
-		// Overwrite the original resolv.conf and set the nameserver to the localhost address to
-		// redirect dns queries to the cmd-nsc sidecar.
-		var sb strings.Builder
-		_, _ = sb.WriteString("nameserver 127.0.0.1")
-		_, _ = sb.WriteRune('\n')
-		_, _ = sb.WriteString("options ndots:5")
-		err = ioutil.WriteFile(originalResolvConfigFile, []byte(sb.String()), os.ModePerm)
-                if err != nil {
-			logger.Fatalf("failed to write to original resolv.conf: %v", err.Error())
-		}
-        }
 }
 
 func setLogLevel(level string) {
