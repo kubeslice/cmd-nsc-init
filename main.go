@@ -82,6 +82,7 @@ func getNsmgrNodeLocalServiceName() string {
         return svcName
 }
 
+
 func main() {
 	// ********************************************************************************
 	// Configure signal handling context
