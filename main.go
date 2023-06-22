@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
@@ -66,6 +67,21 @@ import (
 	"github.com/networkservicemesh/cmd-nsc-init/internal/config"
 )
 
+
+func getNsmgrNodeLocalServiceName() string {
+        nodeName := os.Getenv("MY_NODE_NAME")
+        // Nsmgr service name should be derived from the node name. If the node name does
+        // not conform to a RFC-1035 label name, it needs to be modified by replacing all
+        // uppercase letters to lowercase, replacing all '.' with '-', and finally truncating
+        // the length to 63 characters.
+        svcName := strings.ReplaceAll(strings.ToLower(nodeName), ".", "-")
+        if len(svcName) > 63 {
+                svcName = svcName[:63]
+        }
+
+        return svcName
+}
+
 func main() {
 	// ********************************************************************************
 	// Configure signal handling context
@@ -100,7 +116,7 @@ func main() {
 		logger.Fatalf("error processing rootConf from env: %+v", err)
 	}
 	setLogLevel(rootConf.LogLevel)
-	rootConf.ConnectTo = url.URL{Scheme: "tcp", Host: os.Getenv("MY_NODE_NAME") + ".kubeslice-system.svc.cluster.local:5001"}
+	rootConf.ConnectTo = url.URL{Scheme: "tcp", Host: getNsmgrNodeLocalServiceName() + ".kubeslice-system.svc.cluster.local:5001"}
 	logger.Infof("rootConf: %+v", rootConf)
 
 	// ********************************************************************************
