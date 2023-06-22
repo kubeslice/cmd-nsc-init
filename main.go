@@ -67,6 +67,7 @@ import (
 	"github.com/networkservicemesh/cmd-nsc-init/internal/config"
 )
 
+
 func getNsmgrNodeLocalServiceName() string {
         nodeName := os.Getenv("MY_NODE_NAME")
         // Nsmgr service name should be derived from the node name. If the node name does
