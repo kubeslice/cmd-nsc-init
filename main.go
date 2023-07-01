@@ -25,9 +25,11 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
@@ -77,7 +79,6 @@ func getNsmgrNodeLocalServiceName() string {
 	nodeNameHash := md5.Sum([]byte(os.Getenv("MY_NODE_NAME") + "\n"))
 	return "nsm-" + hex.EncodeToString(nodeNameHash[:])
 }
-
 
 func main() {
 	// ********************************************************************************
@@ -200,6 +201,9 @@ func main() {
 	// Create Network Service Manager nsmClient
 	// ********************************************************************************
 
+	// Initialize DNS only if the connection response contains dns context
+	initDnsConfig := false
+
 	// ********************************************************************************
 	// Initiate connections
 	// ********************************************************************************
@@ -226,6 +230,61 @@ func main() {
 		}
 
 		logger.Infof("successfully connected to %v. Response: %v", u.NetworkService(), resp)
+		// Initialize DNS config only if atleast one of the responses contain a DnsContext section
+		if resp.GetContext().GetDnsContext() != nil {
+			initDnsConfig = true
+		}
+	}
+
+	// This is a simple trick to workaround dns caching problems in istio-proxy router mode. We make a
+	// copy of the original /etc/resolv.conf that contains the IP address of kube-dns. We then overwrite
+	// the /etc/resolv.conf to include the localhost 127.0.0.1 as the first nameserver and the server IP
+	// of kube-dns as the second nameserver. The istio-proxy tries dns resolution sequentially until it
+	// succeeds. Without this step, the istio-proxy router mode caches the server IP of kube-dns that it
+	// reads from /etc/resolv.conf at boot time and subsequently fails to resolve any slice.local names.
+	// This whole thing is needed just to make istio-proxy cache the localhost IP instead of kube-dns IP.
+	// This is a bug in istio-proxy and we need to workaround it for now.
+	// NOTE: The /etc/resolv.conf would contain two nameservers only momentarily until the cmd-nsc sidecar
+	// overwrites it.
+	if initDnsConfig {
+		// Copy the original resolv.conf to the backup directory so that the cmd-nsc sidecar can
+		// read from the backup and initialize its data structures related to dns resolution.
+		storeResolvConfigFile := "/etc/nsm-dns-config/resolv.conf.restore"
+		originalResolvConfigFile := "/etc/resolv.conf"
+
+		originalResolvConf, err := ioutil.ReadFile(originalResolvConfigFile)
+		if err != nil || len(originalResolvConf) == 0 {
+			logger.Fatalf("failed to read resolv.conf: %v", err.Error())
+		}
+		err = os.WriteFile(storeResolvConfigFile, originalResolvConf, os.ModePerm)
+		if err != nil {
+			logger.Fatalf("failed to write resolv.conf to backup: %v", err.Error())
+		}
+
+		// Add the localhost IP as the first nameserver
+		var sb strings.Builder
+		_, _ = sb.WriteString("nameserver 127.0.0.1")
+		_, _ = sb.WriteRune('\n')
+		err = ioutil.WriteFile(originalResolvConfigFile, []byte(sb.String()), os.ModePerm)
+		if err != nil {
+			logger.Fatalf("failed to write to original resolv.conf: %v", err.Error())
+		}
+		// Append the file with the contents of the backed up resolv.conf that contains the
+		// server IP of kube-dns.
+		f, err := os.OpenFile(originalResolvConfigFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			logger.Fatalf("failed to open original resolv.conf to append: %v", err.Error())
+		}
+		storedResolvConf, err := ioutil.ReadFile(storeResolvConfigFile)
+		if err != nil || len(storedResolvConf) == 0 {
+			logger.Fatalf("failed to read stored resolv.conf: %v", err.Error())
+		}
+		if _, err := f.Write(storedResolvConf); err != nil {
+			logger.Fatalf("failed to append to original resolv.conf: %v", err.Error())
+		}
+		if err := f.Close(); err != nil {
+			logger.Fatalf("failed to close resolv.conf file after write: %v", err.Error())
+		}
 	}
 }
 
