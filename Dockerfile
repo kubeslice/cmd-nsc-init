@@ -20,6 +20,6 @@ CMD go test -test.v ./...
 FROM test as debug
 CMD dlv -l :40000 --headless=true --api-version=2 test -test.v ./...
 
-FROM alpine as runtime
+FROM alpine:3.16.2 as runtime
 COPY --from=build /bin/app /bin/app
 ENTRYPOINT ["/bin/app"]
