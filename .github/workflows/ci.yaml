@@ -40,3 +40,34 @@ jobs:
     uses: networkservicemesh/.github/.github/workflows/docker-build-and-test.yaml@main
     secrets:
       token: ${{ secrets.GITHUB_TOKEN }}
+
+  multiarch-build-test:
+    name: Multi-Architecture Build Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.repository != 'networkservicemesh/cmd-template'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: 
+          - linux/amd64
+          - linux/arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build for ${{ matrix.platform }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: false
+          tags: cmd-nsc-init:test
+          cache-from: type=gha,scope=${{ github.ref_name }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-${{ matrix.platform }}
