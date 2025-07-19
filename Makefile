@@ -40,7 +40,7 @@ clean: ## Clean build artifacts
 .PHONY: docker-build
 docker-build: ## Build docker image (multi-arch)
 	docker buildx create --name container --driver=docker-container || true
-	docker build --builder container --platform $(PLATFORMS) -t $(IMG) .
+	docker build --builder container --platform $(PLATFORMS) -t $(IMG) .  --load
 
 .PHONY: docker-push
 docker-push: ## Push docker image (multi-arch)
